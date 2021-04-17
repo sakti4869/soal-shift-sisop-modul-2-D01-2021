@@ -162,3 +162,31 @@ Loba bekerja di sebuah petshop terkenal, suatu saat dia mendapatkan zip yang ber
 **(a)** Pertama-tama program perlu mengextract zip yang diberikan ke dalam folder “/home/[user]/modul2/petshop”. Karena bos Loba teledor, dalam zip tersebut bisa berisi folder-folder yang tidak penting, maka program harus bisa membedakan file dan folder sehingga dapat memproses file yang seharusnya dikerjakan dan menghapus folder-folder yang tidak dibutuhkan.
 
 Jadi di soal ini kita diminta untuk mengekstrak zip yang diberikan ke dalam folder “/home/[user]/modul2/petshop” dengan menggunakan fork dan execv.
+`pid_t nid;
+    nid = fork();
+    if(nid < 0) exit(0);
+    if(nid == 0) {
+        char *argu[] = {"unzip", "-o", "-q", "/home/sakti4869/modul2/pets.zip", "-d", "/home/sakti4869/modul2/petshop", NULL};
+        execv("/usr/bin/unzip", argu);
+    }`
+ Selanjutnya memakai program berikut ini, kita akan dapat membedakan file dan folder sehingga dapat memproses file yang seharusnya dikerjakan dan menghapus folder-folder yang tidak dibutuhkan sesuai soal. Juga digunakan fungsi `wait()` untuk menunggu proses unzip hingga selesai terlebih dahulu.
+ 
+ ` while(wait(&stat) > 0);
+    DIR *direc;
+    struct dirent *access;
+    direc = opendir("/home/sakti4869/modul2/petshop");
+    while((access = readdir(direc)) != NULL) {
+        if((access->d_type == DT_DIR) && strcmp(access->d_name, ".") != 0 && strcmp(access->d_name, "..") != 0) {
+            pid_t nid;
+            nid = fork();
+            if(nid < 0) exit(0);
+            if(nid == 0) {
+                char fldrnme[300];
+                sprintf(fldrnme, "/home/sakti4869/modul2/petshop/%s", access->d_name);
+                char *argu[] = {"rm", "-r", fldrnme, NULL};
+                execv("/bin/rm", argu);
+            }
+        }
+    }`
+    
+`
