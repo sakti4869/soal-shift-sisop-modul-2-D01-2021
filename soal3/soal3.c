@@ -11,7 +11,8 @@
 
 char *fAddress;
 int folderId;
-char *rDir = "/home/fortunela/seslab_sisop/asistensi2/";
+int dfolderId;
+char *tDate;
 
 void makedir () {
 
@@ -21,15 +22,17 @@ void makedir () {
 
 	char buffer[20];
     	strftime(buffer, sizeof(buffer), "%Y-%m-%d_%T", tLocal);
-
-	char *tDate = (char *) malloc(strlen(buffer)+1);
+	
+	if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1){
+        	printf("Process shmat returned NULL\n");
+    	}
 	strcpy(tDate, buffer);
 
 	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
-    	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), folderId);	
+    	}	
 	
+	char *rDir = "/home/fortunela/seslab_sisop/asistensi2/";
 	strcpy(fAddress, rDir);
     	strcat(fAddress, tDate);
 	
@@ -50,12 +53,10 @@ void download () {
 	if ((oldName = (char *) shmat(oldId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
     	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), oldId);
 
 	if ((newName = (char *) shmat(newId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
     	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), newId);
 
 	char buffer3[10];
 	snprintf(buffer3, 10, "/%ld", (current % 1000) + 50);
@@ -69,7 +70,6 @@ void download () {
 	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
     	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), folderId);
 
 	char *argv[] = {"/usr/bin/wget", "-q", buffer2, "-P", fAddress, NULL};
 	execvp("/usr/bin/wget", argv);	
@@ -80,17 +80,14 @@ void renameFile () {
 	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
     	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), folderId);
 
 	if ((oldName = (char *) shmat(oldId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
     	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), oldId);
-
+    	
 	if ((newName = (char *) shmat(newId, NULL, 0)) == (char *) -1){
         	printf("Process shmat returned NULL\n");
     	}
-    	//else printf("Process %d attached the segment %d\n", getpid(), newId);
 
 	char *initName = (char*) malloc(100);	
 	strcpy(initName, fAddress);
@@ -106,7 +103,7 @@ void renameFile () {
 }
 
 void appendStat(){
-	char text[] = "'Download Success'";
+	char text[] = "Download Success";
 	int shift = 5;
 	for(int i=0; i<strlen(text); i++){
 
@@ -119,44 +116,43 @@ void appendStat(){
 			if(text[i] > 'Z') text[i] = text[i] - 'Z' + 'A' - 1;
 		}
 	}
-	char *statAddr = (char*) malloc(100);	
-	strcpy(statAddr, rDir);
-	strcat(statAddr, "status.txt");
-	char *argv[] = {"echo", text, ">>", "status.txt", NULL};
-	execvp("/bin/echo", argv);
-}
+	FILE *fStatus = fopen("status.txt", "a");
+	fprintf(fStatus, "%s\n", text);
+	fclose(fStatus);
 
-void zipFolder() {
+	if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1){
+        	printf("Process shmat returned NULL\n");
+    	}
 	
-
+	char zipName[30];
+	sprintf(zipName, "%s.zip", tDate);
+	char *argv[] = {"zip", "-rm", zipName, tDate, NULL};
+	execvp("/usr/bin/zip", argv);
 }
 
-void delFolder() {
-
-
-}
 
 int main(void) {
 	while(1) {
 	if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0) {
         	printf("smget returned -1\n");
    	 }
-    	//else printf("Allocated %d, at id %d\n", (int) sizeof(fAddress), folderId);
 
 	if ((oldId = shmget(IPC_PRIVATE, 10, IPC_CREAT | 0666)) < 0) {
         	printf("smget returned -1\n");
    	 }
-    	//else printf("Allocated %d, at id %d\n", (int) sizeof(fAddress), oldId);
 
 	if ((newId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) {
         	printf("smget returned -1\n");
    	 }
-    	//else printf("Allocated %d, at id %d\n", (int) sizeof(fAddress), newId);
+
+	if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) {
+        	printf("smget returned -1\n");
+   	 }
 
 	int status=0;
  	pid_t wpid;
 	
-	for(int i=0; i<=23; i++) {
+	for(int i=0; i<=21; i++) {
 		int pid = fork();
 		while ((wpid=wait(&status)) >0);
 		if(pid == 0) {
@@ -164,12 +160,9 @@ int main(void) {
 			else if(i != 0 && i%2 == 1 && i < 20) {
 				sleep(5);
 				download();
-				puts("here");
 			}
 			else if(i != 0 && i%2 == 0 && i <= 20) renameFile();
 			else if(i == 21) appendStat();
-			else if(i == 22) zipFolder();
-			else if(i == 23) delFolder();
 		}else if (pid == -1){
                     printf("%d\n", getpid());
                     exit(0);
