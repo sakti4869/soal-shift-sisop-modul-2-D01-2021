@@ -7,7 +7,7 @@
 #include <string.h>
 #include <sys/ipc.h> 
 #include <sys/shm.h> 
-#include <sys/mman.h>
+#include <sys/stat.h>
 
 char *fAddress;
 int folderId;
@@ -130,46 +130,99 @@ void appendStat(){
 	execvp("/usr/bin/zip", argv);
 }
 
-
-int main(void) {
-	while(1) {
-	if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0) {
-        	printf("smget returned -1\n");
-   	 }
-
-	if ((oldId = shmget(IPC_PRIVATE, 10, IPC_CREAT | 0666)) < 0) {
-        	printf("smget returned -1\n");
-   	 }
-
-	if ((newId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) {
-        	printf("smget returned -1\n");
-   	 }
-
-	if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) {
-        	printf("smget returned -1\n");
-   	 }
-
-	int status=0;
- 	pid_t wpid;
+void bashKiller(char option[]) {
 	
-	for(int i=0; i<=21; i++) {
-		int pid = fork();
-		while ((wpid=wait(&status)) >0);
-		if(pid == 0) {
-			if(i==0) makedir();
-			else if(i != 0 && i%2 == 1 && i < 20) {
+	FILE *fKiller = fopen("killer.sh", "w");
+
+	if(!(strcmp(option, "-x"))) {
+		fprintf(fKiller, "#!/bin/bash \n\nkill %d \necho \'Program is successfully terminated.\' \nrm \"$0\" \n", getpid());
+	}
+	if(!(strcmp(option, "-z"))) {
+		fprintf(fKiller, "#!/bin/bash \n\nkillall -9 3a.o \necho \'Program is forcefully killed.\' \nrm \"$0\" \n");
+	}
+	fclose(fKiller);
+
+	pid_t pid = fork();
+    	if(pid == 0){
+        	char *argv[] = {"chmod", "+x", "killer.sh", NULL};
+        	execv("/bin/chmod", argv);
+    	}
+
+}
+
+int main(int argc, char* argv[]) {
+
+	if(argc < 2) {
+        	printf("Default option is -z.\n");
+		argv[1] = "-z";
+    	}
+	else if(argv[1][1] != 'z' && argv[1][1] != 'x'){
+		printf("Only option -z or -x is permitted.\n");
+        	exit(0);
+	}
+
+	pid_t sid, pid0 = fork();
+	if(pid0 < 0) exit(EXIT_FAILURE);
+	else if(pid0 > 0) exit(EXIT_SUCCESS);
+
+	umask(0);
+	if((sid = setsid()) < 0) exit(EXIT_FAILURE);
+	
+	if((chdir("/home/fortunela/seslab_sisop/asistensi2")) < 0) 		 	exit(EXIT_FAILURE);
+	close(STDIN_FILENO);	
+	close(STDOUT_FILENO);
+	close(STDERR_FILENO);
+	
+	
+	bashKiller(argv[1]);
+	
+	int status, status2;
+	
+	while(1) {
+	if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0)
+        	printf("smget returned -1\n");
+
+	if ((oldId = shmget(IPC_PRIVATE, 10, IPC_CREAT | 0666)) < 0)
+        	printf("smget returned -1\n");
+  
+	if ((newId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0)
+        	printf("smget returned -1\n");
+   	
+	if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0)
+        	printf("smget returned -1\n");
+	
+	pid_t pidn, pid1, pid2, pid3;
+	pidn = fork();
+	
+	if(pidn == 0) {	
+		pid1 = fork();
+		if(pid1 == 0) makedir();
+		else if(pidn == -1) exit(0);
+
+		while ((wait(&status)) >0);
+		for(int i=10; i>0; --i){
+			pid2 = fork();
+			if(pid2 == 0) {
 				sleep(5);
 				download();
 			}
-			else if(i != 0 && i%2 == 0 && i <= 20) renameFile();
-			else if(i == 21) appendStat();
-		}else if (pid == -1){
-                    printf("%d\n", getpid());
-                    exit(0);
+			else if(pidn == -1) exit(0);
+			while ((wait(&status)) > 0);
+			
+			pid3 = fork();
+			if(pid3 == 0) {
+				renameFile();
+			}
+			else if(pidn == -1) exit(0);
+
 		}
-         }
-	while ((wpid=wait(&status)) >0);
+		while ((wait(&status2)) >0);
+		appendStat();
+		
+	}
+	else if(pidn == -1) exit(0);
+
 	sleep(40);
-        //exit(0);
+
 	}
 }
