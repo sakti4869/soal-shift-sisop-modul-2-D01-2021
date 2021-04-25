@@ -197,7 +197,7 @@ int main(int argc, char* argv[]) {
 	if(pidn == 0) {	
 		pid1 = fork();
 		if(pid1 == 0) makedir();
-		else if(pidn == -1) exit(0);
+		else if(pid1 == -1) exit(0);
 
 		while ((wait(&status)) >0);
 		for(int i=10; i>0; --i){
@@ -206,14 +206,14 @@ int main(int argc, char* argv[]) {
 				sleep(5);
 				download();
 			}
-			else if(pidn == -1) exit(0);
+			else if(pid2 == -1) exit(0);
 			while ((wait(&status)) > 0);
 			
 			pid3 = fork();
 			if(pid3 == 0) {
 				renameFile();
 			}
-			else if(pidn == -1) exit(0);
+			else if(pidn3 == -1) exit(0);
 
 		}
 		while ((wait(&status2)) >0);
