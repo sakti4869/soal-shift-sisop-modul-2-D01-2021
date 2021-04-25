@@ -443,10 +443,10 @@ char *tDate;
 void makedir () {
 	time_t current;
 	current = time(NULL);
-   struct tm * tLocal = localtime(&current);
+   	struct tm * tLocal = localtime(&current);
 
 	char buffer[20];
-   strftime(buffer, sizeof(buffer), "%Y-%m-%d_%T", tLocal);
+   	strftime(buffer, sizeof(buffer), "%Y-%m-%d_%T", tLocal);
 	
 	if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
 	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
@@ -454,14 +454,15 @@ void makedir () {
 	strcpy(tDate, buffer);
 	char *rDir = "/home/fortunela/seslab_sisop/asistensi2/";
 	strcpy(fAddress, rDir);
-   strcat(fAddress, tDate);
+   	strcat(fAddress, tDate);
 	
 	char *argv[] = {"mkdir", "-p", fAddress, NULL};
 	execv("/bin/mkdir", argv);
 }
 
 int main(int argc, char* argv[]) {
-   /*Awal dari implementasi daemon.*/
+
+   	/*Awal dari implementasi daemon.*/
 	pid_t sid, pid0 = fork();
 	if(pid0 < 0) exit(EXIT_FAILURE);
 	else if(pid0 > 0) exit(EXIT_SUCCESS);
@@ -476,19 +477,20 @@ int main(int argc, char* argv[]) {
 	/*Akhir dari implementasi daemon.*/
 	
 	while(1) {
-   /*shmget untuk memori fAddress dan tDate*/
-	if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
-	if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
 	
-	pid_t pidn, pid1;
-	pidn = fork();
+   		/*shmget untuk memori fAddress dan tDate*/
+		if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+		if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
 	
-	if(pidn == 0) {	
-		pid1 = fork();
-		if(pid1 == 0) makedir();
+		pid_t pidn, pid1;
+		pidn = fork();
+	
+		if(pidn == 0) {	
+			pid1 = fork();
+			if(pid1 == 0) makedir();
+			else if(pidn == -1) exit(0);
+		}
 		else if(pidn == -1) exit(0);
-	}
-	else if(pidn == -1) exit(0);
 
 	sleep(40);
 	}
@@ -521,18 +523,18 @@ void download () {
 	time_t current;
 	current = time(NULL);
    
-   /*attach shared memory*/
+   	/*attach shared memory*/
 	if ((oldName = (char *) shmat(oldId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
 	if ((newName = (char *) shmat(newId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
    
-   /*modifikasi value pada memori oldName*/
-   char buffer2[30];
+   	/*modifikasi value pada memori oldName*/
+   	char buffer2[30];
 	snprintf(buffer2, 10, "/%ld", (current % 1000) + 50);
 	strcpy(oldName, buffer2);
    
-   snprintf(buffer2, 30, "https://picsum.photos/%ld", (current % 1000) + 50);
+   	snprintf(buffer2, 30, "https://picsum.photos/%ld", (current % 1000) + 50);
 
-   /*modifikasi value pada memori newName*/
+   	/*modifikasi value pada memori newName*/
 	struct tm * tLocal = localtime(&current);
 	char buffer4[30];
 	strftime(buffer4, sizeof(buffer4), "/%Y-%m-%d_%H:%M:%S", tLocal);
@@ -545,39 +547,39 @@ void download () {
 }
 
 int main(int argc, char* argv[]) {
-   /*Awal dari implementasi daemon.*/
+   	/*Awal dari implementasi daemon.*/
 	
 	/*Akhir dari implementasi daemon.*/
 	
 	while(1) {
-   /*shmget untuk alokasi memori fAddress dan tDate*/
+   		/*shmget untuk alokasi memori fAddress dan tDate*/
    
-   /*shmget untuk alokasi memori oldName dan newName*/
-   if ((oldId = shmget(IPC_PRIVATE, 10, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
-	if ((newId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+   		/*shmget untuk alokasi memori oldName dan newName*/
+   		if ((oldId = shmget(IPC_PRIVATE, 10, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+		if ((newId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
    
-	pid_t pidn, pid1, pid2;
-	pidn = fork();
+		pid_t pidn, pid1, pid2;
+		pidn = fork();
 	
-	if(pidn == 0) {	
-		/*fork makedir()*/
+		if(pidn == 0) {	
+			/*fork makedir()*/
       
-      while ((wait(&status)) >0); //menunggu proses pembuatan folder selesai
-		for(int i=10; i>0; --i){
-			pid2 = fork();
-			if(pid2 == 0) {
-				sleep(5);
-				download();
-			}
-			else if(pidn == -1) exit(0);
-	   }
-	else if(pidn == -1) exit(0);
+      			while ((wait(&status)) >0); //menunggu proses pembuatan folder selesai
+			for(int i=10; i>0; --i){
+				pid2 = fork();
+				if(pid2 == 0) {
+					sleep(5);
+					download();
+				}
+				else if(pidn == -1) exit(0);
+	   		}
+		else if(pidn == -1) exit(0);
 
 	sleep(40);
 	}
 }
 ```
-Kemudian karena kita perlu melakukan proses penggantian nama file kita tambahkan fungsi ```renameFile()```` yang isinya sebagai berikut.
+Kemudian karena kita perlu melakukan proses penggantian nama file kita tambahkan fungsi ```renameFile()``` yang isinya sebagai berikut.
 ```
 void renameFile () {
 	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
@@ -586,11 +588,11 @@ void renameFile () {
    
 	char *initName = (char*) malloc(100);	
 	strcpy(initName, fAddress);
-   strcat(initName, oldName);
+   	strcat(initName, oldName);
 
 	char *finalName = (char*) malloc(100);
 	strcpy(finalName, fAddress);
-   strcat(finalName, newName);
+   	strcat(finalName, newName);
 
 	char *argv[] = {"mv", initName, finalName, NULL};
 	execvp("/bin/mv", argv);
@@ -629,14 +631,14 @@ Pertama, kita tuliskan algoritma untuk mengenkripsi dengan Caesar Cipher.
 char text[] = "Download Success";
 int shift = 5;
 for(int i=0; i<strlen(text); i++){
-      if(text[i] >= 'a' && text[i] <= 'z'){
-			text[i] += shift;
-			if(text[i] > 'z') text[i] = text[i] - 'z' + 'a' - 1;
-		}
-		else if(text[i] >= 'A' && text[i] <= 'Z'){
-			text[i] += shift;
-			if(text[i] > 'Z') text[i] = text[i] - 'Z' + 'A' - 1;
-		}
+      	if(text[i] >= 'a' && text[i] <= 'z'){
+		text[i] += shift;
+		if(text[i] > 'z') text[i] = text[i] - 'z' + 'a' - 1;
+	}
+	else if(text[i] >= 'A' && text[i] <= 'Z'){
+		text[i] += shift;
+		if(text[i] > 'Z') text[i] = text[i] - 'Z' + 'A' - 1;
+	}
 }
 ```
 Selanjutnya, kita append teks yang terenkripsi ke ```status.txt```.
@@ -664,7 +666,6 @@ void appendStat(){
 	char text[] = "Download Success";
 	int shift = 5;
 	for(int i=0; i<strlen(text); i++){
-
 		if(text[i] >= 'a' && text[i] <= 'z'){
 			text[i] += shift;
 			if(text[i] > 'z') text[i] = text[i] - 'z' + 'a' - 1;
@@ -694,18 +695,18 @@ pid_t pidn, pid1, pid2, pid3;
 pidn = fork();
 
 if(pidn == 0) {	
-		/*fork makedir()*/
+	/*fork makedir()*/
 
-		while ((wait(&status)) >0);
-		for(int i=10; i>0; --i){
-			/*fork download()*/
+	while ((wait(&status)) >0);
+	for(int i=10; i>0; --i){
+		/*fork download()*/
          
-			while ((wait(&status)) > 0); //menunggu pengunduhan oleh proses download() selesai
+		while ((wait(&status)) > 0); //menunggu pengunduhan oleh proses download() selesai
 			
-         /*fork renameFile()*/
-		}
-      while ((wait(&status2)) >0); //menunggu pengunduhan dan penamaan file selesai semua
-		appendStat();
+         	/*fork renameFile()*/
+	}
+      	while ((wait(&status2)) >0); //menunggu pengunduhan dan penamaan file selesai semua
+	appendStat();
 }
 else if(pidn == -1) exit(0);
 ```
@@ -715,7 +716,6 @@ else if(pidn == -1) exit(0);
 Kita bisa membuat sebuah file bash menggunakan fungsi ```fopen()``` , ```fprintf()```, dan ```fclose()```.
 ```
 void bashKiller() {
-
 	FILE *fKiller = fopen("killer.sh", "w");
 	fprintf(fKiller, "#!/bin/bash \n\n
                      killall -9 3a.o \n
@@ -727,7 +727,7 @@ void bashKiller() {
     	if(pid == 0){
         	char *argv[] = {"chmod", "+x", "killer.sh", NULL};
         	execv("/bin/chmod", argv);
-   }
+   	}
 }
 ```
 ```chmod``` adalah perintah untuk mengubah file permission. Digabung dengan opsi ```+x```, agar semua user bisa menjalankan program bash tersebut.
@@ -749,12 +749,12 @@ int main(int argc, char* argv[]) {
 Untuk mendapatkan argumen (-z atau -x) pada saat program dijalankan, kita menggunakan parameter pointer to array of char ```argv``` yang berada di main.
 ```
 int main(int argc, char* argv[]) {
-   if(argc < 2) {                               //jika mode tidak dispesifikasi pada awal pemanggilan program, maka fungsi ```bashKiller()``` memiliki mode default -z
+   	if(argc < 2) { //jika mode tidak dispesifikasi pada awal pemanggilan program, maka fungsi ```bashKiller()``` memiliki mode default -z
         	printf("Default option is -z.\n");
-		   argv[1] = "-z";
-   }
+		argv[1] = "-z";
+  	}
 	else if(argv[1][1] != 'z' && argv[1][1] != 'x'){ // hanya ada mode -z atau -x
-		   printf("Only option -z or -x is permitted.\n");
+		printf("Only option -z or -x is permitted.\n");
         	exit(0);
 	}
    
@@ -780,13 +780,13 @@ void bashKiller(char option[]) {
 	fclose(fKiller);
 
 	pid_t pid = fork();
-   if(pid == 0){
-        char *argv[] = {"chmod", "+x", "killer.sh", NULL};
-        execv("/bin/chmod", argv);
-   }
+   	if(pid == 0){
+        	char *argv[] = {"chmod", "+x", "killer.sh", NULL};
+        	execv("/bin/chmod", argv);
+   	}
 }
 ```
 # Kendala #
-Pada saat implementasi mode -x, proses tidak bisa berhenti melakukan spawn meskipun parentnya telah di kill. Solusinya dengan menghapus fork saat appendStat(), sehingga exec pada appenStat() melakukan process switch, sehingga spawning berhenti. 
+Pada saat implementasi mode -x, proses tidak bisa berhenti melakukan spawn meskipun parentnya telah di kill. Solusinya dengan menghapus fork saat appendStat(), sehingga exec pada appendStat() melakukan process switch, sehingga spawning berhenti. 
 
 
