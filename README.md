@@ -377,5 +377,416 @@ Hal yang sama juga dilakukan ketika ada dua jenis hewan peliharaan dalam satu fo
 ### Kendala ###
 saya merasa agak kesulitan dalam menentukan argumen apa saja yang ada dalam argu pada execv namun saya daat mengatasinya dengan search dan bekerja dengan kelompok saya. Saya juag mendapat pada saat membuat dan menambah data dalam suatu file sempat berjalan tidak sesuai keinginan karena adanya kesalahan penulisan sintaks. Sedikit ada kendala saat ingin mengerjakan soal e dan akhirnya teratasi dengan mengerjakannya bersamaan dengan soal c dan d. Sehingga saat iterasi menyalin gambar, sekaligus mengisi keterangan.txt.
 
+## Soal 3 ##
+
+Ranora adalah mahasiswa Teknik Informatika yang saat ini sedang menjalani magang di perusahan ternama yang bernama “FakeKos Corp.”, perusahaan yang bergerak dibidang keamanan data. Karena Ranora masih magang, maka beban tugasnya tidak sebesar beban tugas pekerja tetap perusahaan. Di hari pertama Ranora bekerja, pembimbing magang Ranora memberi tugas pertamanya untuk membuat sebuah program.
+
+**(a)** Ranora harus membuat sebuah program C yang dimana setiap 40 detik membuat sebuah direktori dengan nama sesuai timestamp [YYYY-mm-dd_HH:ii:ss].
+
+Pertama, kita perlu import dulu library ```time.h``` untuk keperluan penggunaan timestamp.
+```
+#include <time.h>
+```
+Selanjutnya kita inisialisasi sebuah variabel ```time_t```. Deklarasi ```time(NULL)``` digunakan agar variabel menyimpan detik yang terhitung dalam Unix dari 1 Januari 1970.
+```
+time_t current;
+current = time(NULL);
+```
+Kemudian, kita deklarasikan sebuah struct ```tm```. Fungsi ```localtime``` akan mengisi struct ```tm``` dengan nilai yang merepresentasikan waktu lokal dari Unix tersebut. 
+```
+struct tm * tLocal = localtime(&current);
+```
+Untuk membuat timestamp, kita bisa menggunakan fungsi ```strftime``` seperti berikut.
+```
+char buffer[20];
+strftime(buffer, sizeof(buffer), "%Y-%m-%d_%T", tLocal);
+```
+```%Y-%m-%d``` menghasilkan 2021-04-25. Sedangkan ```%T``` menghasilkan format waktu standar 10:51:05. 
+
+Selanjutnya, string timestamp digabung dengan string parent directory agar menjadi directory address yang akan dibuat folder.
+```
+char *tDate, *fAddress;
+strcpy(tDate, buffer);
+char *rDir = "/home/fortunela/seslab_sisop/asistensi2/";
+strcpy(fAddress, rDir);
+strcat(fAddress, tDate);
+```
+Kemudian, kita bisa panggil fungsi ```exec``` untuk menjalankan perintah pembuatan direktori.
+```
+char *argv[] = {"mkdir", "-p", fAddress, NULL};
+execv("/bin/mkdir", argv);
+```
+```mkdir``` adalah perintah untuk membuat direktori. Dan ```-p``` adalah opsi yang digunakan agr jika parent directory pada ```fAddress``` belum ada, maka akan dibuatkan.
+
+Karena pointer to char ```tDate``` dan ```fAddress``` nantinya digunakan oleh proses lain, perlu dilakukan attach memory agar kedua pointer tersebut dapat di share. Sebelum itu juga perlu ditambahkan library yang berisi fungsi-fungsi untuk implementasi shared memory.
+```
+#include <sys/ipc.h> 
+#include <sys/shm.h> 
+#include <sys/stat.h>
+```
+```
+if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+```
+Ditambahkan juga pada main fungsi ```shmget``` untuk mengalokasikan segemen memori yang bisa dishare.
+```
+if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+```
+Kemudian karena proses pembutan folder diharapkan berjalan setiap 40 detik, maka kita tambahkan fungsi ```sleep```. Selain itu kita tambahkan implementasi daemon agar program berjalan di background. 
+```
+char *fAddress;
+int folderId;
+int dfolderId;
+char *tDate;
+
+void makedir () {
+	time_t current;
+	current = time(NULL);
+   struct tm * tLocal = localtime(&current);
+
+	char buffer[20];
+   strftime(buffer, sizeof(buffer), "%Y-%m-%d_%T", tLocal);
+	
+	if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+   
+	strcpy(tDate, buffer);
+	char *rDir = "/home/fortunela/seslab_sisop/asistensi2/";
+	strcpy(fAddress, rDir);
+   strcat(fAddress, tDate);
+	
+	char *argv[] = {"mkdir", "-p", fAddress, NULL};
+	execv("/bin/mkdir", argv);
+}
+
+int main(int argc, char* argv[]) {
+   /*Awal dari implementasi daemon.*/
+	pid_t sid, pid0 = fork();
+	if(pid0 < 0) exit(EXIT_FAILURE);
+	else if(pid0 > 0) exit(EXIT_SUCCESS);
+
+	umask(0);
+	if((sid = setsid()) < 0) exit(EXIT_FAILURE);
+	
+	if((chdir("/home/fortunela/seslab_sisop/asistensi2")) < 0) exit(EXIT_FAILURE);
+	close(STDIN_FILENO);	
+	close(STDOUT_FILENO);
+	close(STDERR_FILENO);
+	/*Akhir dari implementasi daemon.*/
+	
+	while(1) {
+   /*shmget untuk memori fAddress dan tDate*/
+	if ((folderId = shmget(IPC_PRIVATE, 100, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+	if ((dfolderId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+	
+	pid_t pidn, pid1;
+	pidn = fork();
+	
+	if(pidn == 0) {	
+		pid1 = fork();
+		if(pid1 == 0) makedir();
+		else if(pidn == -1) exit(0);
+	}
+	else if(pidn == -1) exit(0);
+
+	sleep(40);
+	}
+}
+```
+
+**(b)** Setiap direktori yang sudah dibuat diisi dengan 10 gambar yang didownload dari https://picsum.photos/, dimana setiap gambar akan didownload setiap 5 detik. Setiap gambar yang didownload akan diberi nama dengan format timestamp [YYYY-mm-dd_HH:ii:ss] dan gambar tersebut berbentuk persegi dengan ukuran (n%1000) + 50 pixel dimana n adalah detik Epoch Unix.
+
+Pertama, kita dapatkan dulu detik epoch unix lalu kita hitung dengan rumus (n%1000) + 50 dan gabungkan menjadi URL untuk pengunduhan file.
+```
+time_t current;
+current = time(NULL);
+char buffer2[30];
+snprintf(buffer2, 30, "https://picsum.photos/%ld", (current % 1000) + 50);
+```
+Kemudian, kita download foto dari URL tersebut ke folder yang alamatnya ditunjuk ```fAddress```. Sebelumnya juga harus dilakukan attach memori ```fAddress```. Selanjutnya dipanggil fungsi exec untuk melakukan pengunduhan.
+```
+if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+
+char *argv[] = {"/usr/bin/wget", "-q", buffer2, "-P", fAddress, NULL};
+execvp("/usr/bin/wget", argv);	
+```
+```wget``` adalah perintah untuk melakukan pengunduhan.
+
+```-P``` adalah opsi yang ditambahkan agar file tersimpan di direktori yang ditentukan ```fAddress```.
+
+Karena nama file sekarang (hasil perhitungan untuk URL) dan nama file baru (timestamp saat mulai pengunduhan) dibutuhkan untuk penamaan file pada proses lain maka kita lakukan attach memory disini, dan juga kita lakukan set memory di main.
+```
+void download () {
+	time_t current;
+	current = time(NULL);
+   
+   /*attach shared memory*/
+	if ((oldName = (char *) shmat(oldId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+	if ((newName = (char *) shmat(newId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+   
+   /*modifikasi value pada memori oldName*/
+   char buffer2[30];
+	snprintf(buffer2, 10, "/%ld", (current % 1000) + 50);
+	strcpy(oldName, buffer2);
+   
+   snprintf(buffer2, 30, "https://picsum.photos/%ld", (current % 1000) + 50);
+
+   /*modifikasi value pada memori newName*/
+	struct tm * tLocal = localtime(&current);
+	char buffer4[30];
+	strftime(buffer4, sizeof(buffer4), "/%Y-%m-%d_%H:%M:%S", tLocal);
+	strcpy(newName, buffer4);
+
+	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+
+	char *argv[] = {"/usr/bin/wget", "-q", buffer2, "-P", fAddress, NULL};
+	execvp("/usr/bin/wget", argv);	
+}
+
+int main(int argc, char* argv[]) {
+   /*Awal dari implementasi daemon.*/
+	
+	/*Akhir dari implementasi daemon.*/
+	
+	while(1) {
+   /*shmget untuk alokasi memori fAddress dan tDate*/
+   
+   /*shmget untuk alokasi memori oldName dan newName*/
+   if ((oldId = shmget(IPC_PRIVATE, 10, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+	if ((newId = shmget(IPC_PRIVATE, 20, IPC_CREAT | 0666)) < 0) printf("smget returned -1\n");
+   
+	pid_t pidn, pid1, pid2;
+	pidn = fork();
+	
+	if(pidn == 0) {	
+		/*fork makedir()*/
+      
+      while ((wait(&status)) >0); //menunggu proses pembuatan folder selesai
+		for(int i=10; i>0; --i){
+			pid2 = fork();
+			if(pid2 == 0) {
+				sleep(5);
+				download();
+			}
+			else if(pidn == -1) exit(0);
+	   }
+	else if(pidn == -1) exit(0);
+
+	sleep(40);
+	}
+}
+```
+Kemudian karena kita perlu melakukan proses penggantian nama file kita tambahkan fungsi ```renameFile()```` yang isinya sebagai berikut.
+```
+void renameFile () {
+	if ((fAddress = (char *) shmat(folderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+	if ((oldName = (char *) shmat(oldId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+	if ((newName = (char *) shmat(newId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+   
+	char *initName = (char*) malloc(100);	
+	strcpy(initName, fAddress);
+   strcat(initName, oldName);
+
+	char *finalName = (char*) malloc(100);
+	strcpy(finalName, fAddress);
+   strcat(finalName, newName);
+
+	char *argv[] = {"mv", initName, finalName, NULL};
+	execvp("/bin/mv", argv);
+}
+```
+```mv``` adalah perintah untuk penggantian nama dan pemindahan file atau folder.
+
+Selanjutnya pada main kita tambahkan struktur fork seperti berikut.
+```
+pid_t pidn, pid1, pid2, pid3;
+pidn = fork();
+
+if(pidn == 0) {	
+		/*fork makedir()*/
+
+		while ((wait(&status)) >0);
+		for(int i=10; i>0; --i){
+			/*fork download()*/
+         
+			while ((wait(&status)) > 0); //menunggu pengunduhan oleh proses download() selesai
+			
+			pid3 = fork();
+			if(pid3 == 0) {
+				renameFile();
+			}
+			else if(pidn == -1) exit(0);
+		}
+}
+else if(pidn == -1) exit(0);
+```
+
+**(c)** Setelah direktori telah terisi dengan 10 gambar, program tersebut akan membuat sebuah file “status.txt”, dimana didalamnya berisi pesan “Download Success” yang terenkripsi dengan teknik Caesar Cipher dan dengan shift 5. Caesar Cipher adalah Teknik enkripsi sederhana yang dimana dapat melakukan enkripsi string sesuai dengan shift/key yang kita tentukan. Misal huruf “A” akan dienkripsi dengan shift 4 maka akan menjadi “E”. Karena Ranora orangnya perfeksionis dan rapi, dia ingin setelah file tersebut dibuat, direktori akan di zip dan direktori akan didelete, sehingga menyisakan hanya file zip saja.
+
+Pertama, kita tuliskan algoritma untuk mengenkripsi dengan Caesar Cipher.
+```
+char text[] = "Download Success";
+int shift = 5;
+for(int i=0; i<strlen(text); i++){
+      if(text[i] >= 'a' && text[i] <= 'z'){
+			text[i] += shift;
+			if(text[i] > 'z') text[i] = text[i] - 'z' + 'a' - 1;
+		}
+		else if(text[i] >= 'A' && text[i] <= 'Z'){
+			text[i] += shift;
+			if(text[i] > 'Z') text[i] = text[i] - 'Z' + 'A' - 1;
+		}
+}
+```
+Selanjutnya, kita append teks yang terenkripsi ke ```status.txt```.
+```
+FILE *fStatus = fopen("status.txt", "a");
+fprintf(fStatus, "%s\n", text);
+fclose(fStatus);
+```
+Opsi ```"a"``` diatas menandakan append file, sehingga line baru ditambahkan di line baru dan tidak overwrite konten sebelumnya dari ```status.txt```.
+
+Kita harus meng-zip folder yang dibuat kemudian folder tersebut dihapus. Dilakukan attach memory ```tDate``` karena dibutuhkan dalam spesifikasi folder yang akan dizip dan juga penamaan hasil zip.
+```
+if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1) printf("Process shmat returned NULL\n");
+	
+char zipName[30];
+sprintf(zipName, "%s.zip", tDate);
+char *argv[] = {"zip", "-rm", zipName, tDate, NULL};
+execvp("/usr/bin/zip", argv);
+```
+Opsi ```-rm``` meng-otomatiskan bahwa folder dihapus setelah di zip.
+
+Sehingga terbentuklah fungsi ```appendStat()``` seperti berikut.
+```
+void appendStat(){
+	char text[] = "Download Success";
+	int shift = 5;
+	for(int i=0; i<strlen(text); i++){
+
+		if(text[i] >= 'a' && text[i] <= 'z'){
+			text[i] += shift;
+			if(text[i] > 'z') text[i] = text[i] - 'z' + 'a' - 1;
+		}
+		else if(text[i] >= 'A' && text[i] <= 'Z'){
+			text[i] += shift;
+			if(text[i] > 'Z') text[i] = text[i] - 'Z' + 'A' - 1;
+		}
+	}
+	FILE *fStatus = fopen("status.txt", "a");
+	fprintf(fStatus, "%s\n", text);
+	fclose(fStatus);
+
+	if ((tDate = (char *) shmat(dfolderId, NULL, 0)) == (char *) -1){
+        	printf("Process shmat returned NULL\n");
+    	}
+	
+	char zipName[30];
+	sprintf(zipName, "%s.zip", tDate);
+	char *argv[] = {"zip", "-rm", zipName, tDate, NULL};
+	execvp("/usr/bin/zip", argv);
+}
+```
+Kemudian fungsi ```appendStat()``` ditambahkan pada main sperti berikut ini.
+```
+pid_t pidn, pid1, pid2, pid3;
+pidn = fork();
+
+if(pidn == 0) {	
+		/*fork makedir()*/
+
+		while ((wait(&status)) >0);
+		for(int i=10; i>0; --i){
+			/*fork download()*/
+         
+			while ((wait(&status)) > 0); //menunggu pengunduhan oleh proses download() selesai
+			
+         /*fork renameFile()*/
+		}
+      while ((wait(&status2)) >0); //menunggu pengunduhan dan penamaan file selesai semua
+		appendStat();
+}
+else if(pidn == -1) exit(0);
+```
+
+**(d)** Untuk mempermudah pengendalian program, pembimbing magang Ranora ingin program tersebut akan men-generate sebuah program “Killer” yang executable, dimana program tersebut akan menterminasi semua proses program yang sedang berjalan dan akan menghapus dirinya sendiri setelah program dijalankan. Karena Ranora menyukai sesuatu hal yang baru, maka Ranora memiliki ide untuk program “Killer” yang dibuat nantinya harus merupakan program bash.
+
+Kita bisa membuat sebuah file bash menggunakan fungsi ```fopen()``` , ```fprintf()```, dan ```fclose()```.
+```
+void bashKiller() {
+
+	FILE *fKiller = fopen("killer.sh", "w");
+	fprintf(fKiller, "#!/bin/bash \n\n
+                     killall -9 3a.o \n
+                     echo \'Program is forcefully killed.\' \n
+                     rm \"$0\" \n");
+	fclose(fKiller);
+
+	pid_t pid = fork();
+    	if(pid == 0){
+        	char *argv[] = {"chmod", "+x", "killer.sh", NULL};
+        	execv("/bin/chmod", argv);
+   }
+}
+```
+```chmod``` adalah perintah untuk mengubah file permission. Digabung dengan opsi ```+x```, agar semua user bisa menjalankan program bash tersebut.
+
+Dan fungsi diatas bisa dipanggil setelah dilakukannya implementasi daemon seperti berikut.
+```
+int main(int argc, char* argv[]) {
+
+	/*implementasi daemon*/
+	
+	bashKiller();
+	
+	/*solusi soal a, b, c*/
+}
+```
+
+**(e)** Pembimbing magang Ranora juga ingin nantinya program utama yang dibuat Ranora dapat dijalankan di dalam dua mode. Untuk mengaktifkan mode pertama, program harus dijalankan dsdengan argumen -z, dan Ketika dijalankan dalam mode pertama, program utama akan langsung menghentikan semua operasinya Ketika program Killer dijalankan. Sedangkan untuk mengaktifkan mode kedua, program harus dijalankan dengan argumen -x, dan Ketika dijalankan dalam mode kedua, program utama akan berhenti namun membiarkan proses di setiap direktori yang masih berjalan hingga selesai (Direktori yang sudah dibuat akan mendownload gambar sampai selesai dan membuat file txt, lalu zip dan delete direktori).
+
+Untuk mendapatkan argumen (-z atau -x) pada saat program dijalankan, kita menggunakan parameter pointer to array of char ```argv``` yang berada di main.
+```
+int main(int argc, char* argv[]) {
+   if(argc < 2) {                               //jika mode tidak dispesifikasi pada awal pemanggilan program, maka fungsi ```bashKiller()``` memiliki mode default -z
+        	printf("Default option is -z.\n");
+		   argv[1] = "-z";
+   }
+	else if(argv[1][1] != 'z' && argv[1][1] != 'x'){ // hanya ada mode -z atau -x
+		   printf("Only option -z or -x is permitted.\n");
+        	exit(0);
+	}
+   
+	/*implementasi daemon*/
+   
+	bashKiller(argv[1]);
+   
+	/*solusi soal a, b, c*/
+}
+```
+Kemudian fungsi ```bashKiller()``` kita modifikasi untuk memiliki parameter, dan kita tambahkan implementasi untuk mode -x dan -z.
+```
+void bashKiller(char option[]) {
+	
+	FILE *fKiller = fopen("killer.sh", "w");
+
+	if(!(strcmp(option, "-x"))) 
+		fprintf(fKiller, "#!/bin/bash \n\nkill %d \necho \'Program is successfully terminated.\' \nrm \"$0\" \n", getpid());
+      
+	if(!(strcmp(option, "-z"))) 
+		fprintf(fKiller, "#!/bin/bash \n\nkillall -9 3a.o \necho \'Program is forcefully killed.\' \nrm \"$0\" \n");
+	
+	fclose(fKiller);
+
+	pid_t pid = fork();
+   if(pid == 0){
+        char *argv[] = {"chmod", "+x", "killer.sh", NULL};
+        execv("/bin/chmod", argv);
+   }
+}
+```
+# Kendala #
+Pada saat implementasi mode -x, proses tidak bisa berhenti melakukan spawn meskipun parentnya telah di kill. Solusinya dengan menghapus fork saat appendStat(), sehingga exec pada appenStat() melakukan process switch, sehingga spawning berhenti. 
 
 
